@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShiftSync — HR Platform for South African SMEs</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>
+    // The component was written for an environment providing window.storage;
+    // back it with localStorage so the waitlist persists in the browser.
+    window.storage = {
+      get: async (key) => {
+        const v = localStorage.getItem(key);
+        return v === null ? null : { value: v };
+      },
+      set: async (key, value) => { localStorage.setItem(key, value); },
+    };
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap');`;
+
+const T = {
+  bg: "#08090F", surface: "#0E1018", card: "#111520", sidebar: "#0A0B14",
+  border: "#181E2E", gold: "#E8A020", goldDim: "rgba(232,160,32,0.10)",
+  goldGlow: "rgba(232,160,32,0.06)", text: "#EDF0F6", muted: "#6B7894",
+  green: "#22C55E", red: "#EF4444", blue: "#3B82F6", purple: "#8B5CF6",
+};
+
+const AI_SYSTEM = `You are ShiftSync AI, a practical HR assistant for South African businesses. Help managers with:
+- Drafting disciplinary letters (written warnings, final warnings, suspension, dismissal)
+- South African labour law explained simply (BCEA, LRA, UIF, OHSA)
+- Performance reviews and HR communications
+- CCMA procedures and what to expect
+- Leave entitlements and calculations
+
+Key SA law facts:
+- Annual leave: 15 working days/year (BCEA s20)
+- Sick leave: 30 days in a 3-year cycle (s22)
+- Family responsibility: 3 days/year for births, illness, death (s27)
+- Notice periods: 1 week <6mo, 2 weeks 6mo-1yr, 4 weeks >1yr
+- Disciplinary process: verbal → written warning → final written warning → dismissal
+- UIF: 1% employee + 1% employer on earnings
+- CCMA: conciliation within 30 days of dispute, arbitration within 90 days
+
+Be concise, practical, and legally accurate. Format documents with clear headings. South African context only.`;
+
+const SAMPLE_STAFF = [
+  { id:1, name:"Thabo Sithole", role:"Warehouse Supervisor", dept:"Operations", email:"thabo@company.co.za", phone:"082 345 6789", startDate:"2021-03-15", status:"active", annual:12, sick:24 },
+  { id:2, name:"Nomsa Dlamini", role:"Admin Assistant", dept:"Administration", email:"nomsa@company.co.za", phone:"071 234 5678", startDate:"2022-07-01", status:"active", annual:8, sick:30 },
+  { id:3, name:"John van der Merwe", role:"Driver", dept:"Logistics", email:"john@company.co.za", phone:"083 456 7890", startDate:"2020-01-10", status:"active", annual:15, sick:18 },
+  { id:4, name:"Precious Mokoena", role:"Sales Representative", dept:"Sales", email:"precious@company.co.za", phone:"079 567 8901", startDate:"2023-02-20", status:"active", annual:5, sick:30 },
+  { id:5, name:"Sipho Ndlovu", role:"Forklift Operator", dept:"Warehouse", email:"sipho@company.co.za", phone:"064 678 9012", startDate:"2021-11-05", status:"active", annual:10, sick:22 },
+  { id:6, name:"Karen Botha", role:"Accountant", dept:"Finance", email:"karen@company.co.za", phone:"082 789 0123", startDate:"2019-05-22", status:"active", annual:18, sick:30 },
+];
+
+const SAMPLE_LEAVE = [
+  { id:1, staffId:2, type:"Annual", start:"2025-06-20", end:"2025-06-25", days:4, reason:"Family holiday", status:"pending", applied:"2025-06-10" },
+  { id:2, staffId:5, type:"Sick", start:"2025-06-12", end:"2025-06-13", days:2, reason:"Medical appointment", status:"pending", applied:"2025-06-11" },
+  { id:3, staffId:3, type:"Annual", start:"2025-06-03", end:"2025-06-07", days:5, reason:"Personal travel", status:"approved", applied:"2025-05-28" },
+  { id:4, staffId:1, type:"Family Responsibility", start:"2025-06-09", end:"2025-06-09", days:1, reason:"Child graduation", status:"approved", applied:"2025-06-06" },
+  { id:5, staffId:6, type:"Annual", start:"2025-07-14", end:"2025-07-18", days:5, reason:"Holiday", status:"pending", applied:"2025-06-09" },
+];
+
+const DEPT_COLOR = { Operations:"#3B82F6", Administration:"#8B5CF6", Logistics:"#10B981", Sales:"#F59E0B", Warehouse:"#EF4444", Finance:"#06B6D4", HR:"#EC4899", Management:"#E8A020" };
+const dc = d => DEPT_COLOR[d] || T.gold;
+const initials = n => n.split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase();
+const fmtDate = d => { try { return new Date(d).toLocaleDateString("en-ZA",{day:"2-digit",month:"short",year:"numeric"}); } catch { return d; } };
+const LEAVE_TYPES = ["Annual","Sick","Family Responsibility","Unpaid"];
+const LEAVE_COLOR = { Annual:T.gold, Sick:T.blue, "Family Responsibility":T.purple, Unpaid:T.muted };
+const DEPTS = ["Operations","Administration","Logistics","Sales","Warehouse","Finance","HR","Management"];
+
+// ─── MODAL ───
+function Modal({ title, onClose, children, wide }) {
+  return (
+    <div onClick={onClose} style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20 }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:16,width:"100%",maxWidth:wide?700:520,maxHeight:"90vh",overflow:"auto" }}>
+        <div style={{ padding:"20px 24px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+          <h2 style={{ fontFamily:"Syne, sans-serif",fontWeight:700,fontSize:18,color:T.text }}>{title}</h2>
+          <button onClick={onClose} style={{ background:"none",border:"none",color:T.muted,cursor:"pointer",fontSize:24,lineHeight:1 }}>×</button>
+        </div>
+        <div style={{ padding:24 }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── BADGE ───
+function Badge({ status }) {
+  const c = { approved:T.green,pending:T.gold,declined:T.red,active:T.green }[status]||T.muted;
+  return <span style={{ background:`${c}20`,color:c,border:`1px solid ${c}40`,borderRadius:6,padding:"3px 10px",fontSize:11,fontWeight:700,letterSpacing:"0.05em",textTransform:"capitalize" }}>{status}</span>;
+}
+
+// ─── FIELD ───
+function Field({ label, value, onChange, type="text", placeholder, options, required, hint }) {
+  const s = { width:"100%",background:T.surface,border:`1px solid ${T.border}`,color:T.text,borderRadius:8,padding:"11px 14px",fontSize:14,fontFamily:"Inter, sans-serif",outline:"none",marginTop:6 };
+  return (
+    <div style={{ marginBottom:16 }}>
+      <label style={{ color:T.muted,fontSize:12,fontWeight:600,letterSpacing:"0.05em" }}>{label}{required&&" *"}</label>
+      {options
+        ? <select value={value} onChange={e=>onChange(e.target.value)} style={{ ...s,cursor:"pointer" }}><option value="">Select...</option>{options.map(o=><option key={o} value={o}>{o}</option>)}</select>
+        : <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={s} />
+      }
+      {hint && <div style={{ color:T.muted,fontSize:11,marginTop:4 }}>{hint}</div>}
+    </div>
+  );
+}
+
+// ─── OVERVIEW ───
+function Overview({ staff, leave, setTab }) {
+  const pending = leave.filter(l=>l.status==="pending").length;
+  const stats = [
+    { label:"Total Staff",    value:staff.length,   icon:"👥", color:T.gold,  sub:"Active employees",      click:"staff" },
+    { label:"Pending Leave",  value:pending,         icon:"📋", color:pending?T.gold:T.green, sub:"Awaiting approval", click:"leave", urgent:pending>0 },
+    { label:"Leave Approved", value:leave.filter(l=>l.status==="approved").length, icon:"✅", color:T.green, sub:"All time", click:"leave" },
+    { label:"AI Queries",     value:"∞",             icon:"🤖", color:T.blue,  sub:"Available this month",  click:"ai" },
+  ];
+  const recent = [...leave].sort((a,b)=>new Date(b.applied)-new Date(a.applied)).slice(0,5);
+  return (
+    <div>
+      <div style={{ marginBottom:28 }}>
+        <h1 style={{ fontFamily:"Syne, sans-serif",fontWeight:800,fontSize:26,color:T.text,marginBottom:4 }}>Good morning 👋</h1>
+        <p style={{ color:T.muted,fontSize:14 }}>Here's what's happening with your team.</p>
+      </div>
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(190px, 1fr))",gap:14,marginBottom:28 }}>
+        {stats.map((s,i)=>(
+          <div key={i} onClick={()=>setTab(s.click)} style={{ background:T.card,border:`1px solid ${s.urgent?T.gold+"60":T.border}`,borderRadius:14,padding:"22px 22px",cursor:"pointer",transition:"transform .2s" }}
+            onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseLeave={e=>e.currentTarget.style.transform="translateY(0)"}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12 }}>
+              <span style={{ fontSize:24 }}>{s.icon}</span>
+              {s.urgent&&<span style={{ background:`${T.gold}20`,color:T.gold,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4 }}>ACTION</span>}
+            </div>
+            <div style={{ fontFamily:"Syne, sans-serif",fontWeight:800,fontSize:34,color:s.color,marginBottom:4 }}>{s.value}</div>
+            <div style={{ color:T.text,fontSize:14,fontWeight:600 }}>{s.label}</div>
+            <div style={{ color:T.muted,fontSize:12,marginTop:2 }}>{s.sub}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display:"grid",gridTemplateColumns:"3fr 2fr",gap:20 }}>
+        <div style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:24 }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20 }}>
+            <h3 style={{ fontFamily:"Syne, sans-serif",fontWeight:700,fontSize:16,color:T.text }}>Recent Leave Requests</h3>
+            <button onClick={()=>setTab("leave")} style={{ background:"none",border:"none",color:T.gold,cursor:"pointer",fontSize:13,fontFamily:"Inter, sans-serif" }}>View all →</button>
+          </div>
+          {recent.map(req=>{
+            const m=staff.find(s=>s.id===req.staffId);
+            return (
+              <div key={req.id} style={{ display:"flex",alignItems:"center",gap:12,marginBottom:14,paddingBottom:14,borderBottom:`1px solid ${T.border}` }}>
+                <div style={{ width:38,height:38,borderRadius:9,background:dc(m?.dept)+"25",border:`1px solid ${dc(m?.dept)}50`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:dc(m?.dept),fontFamily:"Syne, sans-serif",flexShrink:0 }}>{initials(m?.name||"?")}</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ color:T.text,fontSize:13,fontWeight:500 }}>{m?.name||"Unknown"}</div>
+                  <div style={{ color:T.muted,fontSize:12 }}>{req.type} · {req.days} day{req.days>1?"s":""} · {fmtDate(req.start)}</div>
+                </div>
+                <Badge status={req.status}/>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:24 }}>
+          <h3 style={{ fontFamily:"Syne, sans-serif",fontWeight:700,fontSize:16,color:T.text,marginBottom:20 }}>Quick Actions</h3>
+          {[
+            { icon:"➕", label:"Add new staff member", tab:"staff" },
+            { icon:"📋", label:"Review leave requests", tab:"leave", badge:pending },
+            { icon:"⚠️", label:"Draft a warning letter", tab:"ai" },
+            { icon:"📄", label:"Write a performance review", tab:"ai" },
+            { icon:"❓", label:"Ask an HR question", tab:"ai" },
+          ].map((a,i,arr)=>(
+            <button key={i} onClick={()=>setTab(a.tab)} style={{ width:"100%",background:"none",border:"none",padding:"11px 0",cursor:"pointer",display:"flex",alignItems:"center",gap:12,borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",fontFamily:"Inter, sans-serif" }}>
+              <span style={{ fontSize:16 }}>{a.icon}</span>
+              <span style={{ color:T.text,fontSize:13,flex:1,textAlign:"left" }}>{a.label}</span>
+              {a.badge>0&&<span style={{ background:T.gold,color:"#000",fontSize:11,fontWeight:700,width:20,height:20,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center" }}>{a.badge}</span>}
+              <span style={{ color:T.muted,fontSize:16 }}>›</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── STAFF DIRECTORY ───
+function StaffDirectory({ staff, setStaff }) {
+  const [q, setQ] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [form, setForm] = useState({ name:"",role:"",dept:"",email:"",phone:"",startDate:"" });
+  const filtered = staff.filter(s=>[s.name,s.role,s.dept].join(" ").toLowerCase().includes(q.toLowerCase()));
+  const save = () => {
+    if(!form.name||!form.role||!form.dept) return;
+    setStaff(p=>[...p,{ id:Date.now(),...form,status:"active",annual:15,sick:30 }]);
+    setForm({ name:"",role:"",dept:"",email:"",phone:"",startDate:"" });
+    setShowAdd(false);
+  };
+  return (
+    <div>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22 }}>
+        <div>
+          <h1 style={{ fontFamily:"Syne, sans-serif",fontWeight:800,fontSize:26,color:T.text }}>Staff Directory</h1>
+          <p style={{ color:T.muted,fontSize:13,marginTop:3 }}>{staff.length} employees</p>
+        </div>
+        <button onClick={()=>setShowAdd(true)} style={{ background:T.gold,color:"#000",border:"none",borderRadius:9,padding:"11px 20px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"Inter, sans-serif" }}>+ Add Staff</button>
+      </div>
+      <input type="text" placeholder="Search name, role, or department..." value={q} onChange={e=>setQ(e.target.value)}
+        style={{ width:"100%",background:T.card,border:`1px solid ${T.border}`,color:T.text,borderRadius:9,padding:"12px 16px",fontSize:14,fontFamily:"Inter, sans-serif",outline:"none",marginBottom:20 }}
+      />
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(270px, 1fr))",gap:14 }}>
+        {filtered.map(m=>(
+          <div key={m.id} onClick={()=>setSelected(m)} style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:20,cursor:"pointer",transition:"border-color .2s,transform .2s" }}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=dc(m.dept)+"60";e.currentTarget.style.transform="translateY(-2px)";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.transform="translateY(0)";}}>
+            <div style={{ display:"flex",alignItems:"center",gap:14,marginBottom:14 }}>
+              <div style={{ width:46,height:46,borderRadius:12,background:dc(m.dept)+"25",border:`1px solid ${dc(m.dept)}50`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:dc(m.dept),fontFamily:"Syne, sans-serif",flexShrink:0 }}>{initials(m.name)}</div>
+              <div><div style={{ color:T.text,fontSize:15,fontWeight:600 }}>{m.name}</div><div style={{ color:T.muted,fontSize:12 }}>{m.role}</div></div>
+            </div>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8 }}>
+              <span style={{ background:dc(m.dept)+"20",color:dc(m.dept),fontSize:11,fontWeight:600,padding:"3px 9px",borderRadius:5 }}>{m.dept}</span>
+              <Badge status={m.status}/>
+            </div>
+            {m.email&&<div style={{ color:T.muted,fontSize:12,marginTop:8,display:"flex",alignItems:"center",gap:5 }}>✉ {m.email}</div>}
+            <div style={{ color:T.muted,fontSize:12,marginTop:4 }}>🏖 {m.annual} annual days · 🏥 {m.sick} sick days</div>
+          </div>
+        ))}
+      </div>
+      {filtered.length===0&&<div style={{ textAlign:"center",padding:"60px 20px",color:T.muted }}><div style={{ fontSize:36,marginBottom:12 }}>🔍</div><p>No staff found matching "{q}"</p></div>}
+
+      {showAdd&&(
+        <Modal title="Add Staff Member" onClose={()=>setShowAdd(false)}>
+          <Field label="Full Name" value={form.name} onChange={v=>setForm(p=>({...p,name:v}))} placeholder="e.g. Thabo Sithole" required/>
+          <Field label="Job Title / Role" value={form.role} onChange={v=>setForm(p=>({...p,role:v}))} placeholder="e.g. Warehouse Supervisor" required/>
+          <Field label="Department" value={form.dept} onChange={v=>setForm(p=>({...p,dept:v}))} options={DEPTS} required/>
+          <Field label="Email Address" value={form.email} onChange={v=>setForm(p=>({...p,email:v}))} type="email" placeholder="employee@company.co.za"/>
+          <Field label="Phone Number" value={form.phone} onChange={v=>setForm(p=>({...p,phone:v}))} placeholder="082 000 0000"/>
+          <Field label="Start Date" value={form.startDate} onChange={v=>setForm(p=>({...p,startDate:v}))} type="date"/>
+          <div style={{ display:"flex",gap:10,marginTop:8 }}>
+            <button onClick={save} style={{ flex:1,background:T.gold,color:"#000",border:"none",borderRadius:8,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"Inter, sans-serif" }}>Add Staff Member</button>
+            <button onClick={()=>setShowAdd(false)} style={{ flex:1,background:"none",border:`1px solid ${T.border}`,color:T.muted,borderRadius:8,padding:"12px",fontSize:14,cursor:"pointer",fontFamily:"Inter, sans-serif" }}>Cancel</button>
+          </div>
+        </Modal>
+      )}
+
+      {selected&&(
+        <Modal title="Employee Profile" onClose={()=>setSelected(null)}>
+          <div style={{ textAlign:"center",marginBottom:24 }}>
+            <div style={{ width:72,height:72,borderRadius:18,background:dc(selected.dept)+"25",border:`2px solid ${dc(selected.dept)}60`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:800,color:dc(selected.dept),fontFamily:"Syne, sans-serif",margin:"0 auto 14px" }}>{initials(selected.name)}</div>
+            <h2 style={{ fontFamily:"Syne, sans-serif",fontWeight:700,fontSize:20,color:T.text,marginBottom:4 }}>{selected.name}</h2>
+            <p style={{ color:T.muted,fontSize:14 }}>{selected.role} · {selected.dept}</p>
+            <div style={{ marginTop:10 }}><Badge status={selected.status}/></div>
+          </div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:18 }}>
+            {[["Email",selected.email||"—"],["Phone",selected.phone||"—"],["Start Date",selected.startDate?fmtDate(selected.startDate):"—"],["Department",selected.dept]].map(([k,v])=>(
+              <div key={k} style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:9,padding:"12px 14px" }}>
+                <div style={{ color:T.muted,fontSize:11,fontWeight:600,letterSpacing:"0.05em",marginBottom:4 }}>{k.toUpperCase()}</div>
+                <div style={{ color:T.text,fontSize:13,wordBreak:"break-all" }}>{v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:18 }}>
+            <div style={{ color:T.muted,fontSize:12,fontWeight:600,letterSpacing:"0.05em",marginBottom:14 }}>LEAVE BALANCE</div>
+            {[["Annual Leave",selected.annual,15,T.gold],["Sick Leave",selected.sick,30,T.blue]].map(([l,v,max,c])=>(
+              <div key={l} style={{ marginBottom:14 }}>
+                <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}>
+                  <span style={{ color:T.text,fontSize:13 }}>{l}</span>
+                  <span style={{ color:c,fontSize:13,fontWeight:600 }}>{v} / {max} days</span>
+                </div>
+                <div style={{ height:5,background:T.border,borderRadius:3 }}>
+                  <div style={{ height:"100%",width:`${Math.min(100,(v/max)*100)}%`,background:c,borderRadius:3,transition:"width .5s" }}/>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── LEAVE MANAGER ───
+function LeaveManager({ staff, leave, setLeave }) {
+  const [tab, setTab] = useState("pending");
+  const [showApply, setShowApply] = useState(false);
+  const [form, setForm] = useState({ staffId:"",type:"",start:"",end:"",reason:"" });
+  const pending=leave.filter(l=>l.status==="pending");
+  const approved=leave.filter(l=>l.status==="approved");
+  const declined=leave.filter(l=>l.status==="declined");
+  const update=(id,status)=>setLeave(p=>p.map(l=>l.id===id?{...l,status}:l));
+  const apply=()=>{
+    if(!form.staffId||!form.type||!form.start||!form.end)return;
+    const days=Math.max(1,Math.round((new Date(form.end)-new Date(form.start))/86400000)+1);
+    setLeave(p=>[...p,{ id:Date.now(),staffId:parseInt(form.staffId),type:form.type,start:form.start,end:form.end,days,reason:form.reason,status:"pending",applied:new Date().toISOString().split("T")[0] }]);
+    setForm({ staffId:"",type:"",start:"",end:"",reason:"" });
+    setShowApply(false);
+    setTab("pending");
+  };
+  const rows=tab==="pending"?pending:tab==="approved"?approved:declined;
+  return (
+    <div>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22 }}>
+        <div>
+          <h1 style={{ fontFamily:"Syne, sans-serif",fontWeight:800,fontSize:26,color:T.text }}>Leave Manager</h1>
+          <p style={{ color:T.muted,fontSize:13,marginTop:3 }}>{pending.length} pending · {approved.length} approved · {declined.length} declined</p>
+        </div>
+        <button onClick={()=>setShowApply(true)} style={{ background:T.gold,color:"#000",border:"none",borderRadius:9,padding:"11px 20px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"Inter, sans-serif" }}>+ Apply for Leave</button>
+      </div>
+
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:22 }}>
+        {LEAVE_TYPES.map(t=>{
+          const c=LEAVE_COLOR[t];
+          const n=leave.filter(l=>l.type===t).length;
+          return <div key={t} style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"16px 18px" }}>
+            <div style={{ fontFamily:"Syne, sans-serif",fontWeight:800,fontSize:28,color:c,marginBottom:4 }}>{n}</div>
+            <div style={{ color:T.muted,fontSize:12 }}>{t}</div>
+          </div>;
+        })}
+      </div>
+
+      <div style={{ display:"flex",gap:4,background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:4,marginBottom:18,width:"fit-content" }}>
+        {[["pending","Pending",pending.length],["approved","Approved",approved.length],["declined","Declined",declined.length]].map(([id,label,n])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{ background:tab===id?T.card:"none",border:tab===id?`1px solid ${T.border}`:"1px solid transparent",borderRadius:7,padding:"8px 16px",fontSize:13,fontWeight:600,color:tab===id?T.text:T.muted,cursor:"pointer",fontFamily:"Inter, sans-serif",display:"flex",alignItems:"center",gap:7 }}>
+            {label}
+            {n>0&&<span style={{ background:tab===id?(id==="pending"?T.gold:T.green)+"30":T.border,color:id==="pending"?T.gold:T.green,fontSize:11,fontWeight:700,padding:"1px 7px",borderRadius:10 }}>{n}</span>}
+          </button>
+        ))}
+      </div>
+
+      {rows.length===0
+        ?<div style={{ textAlign:"center",padding:"60px 20px",background:T.card,border:`1px solid ${T.border}`,borderRadius:14,color:T.muted }}><div style={{ fontSize:36,marginBottom:12 }}>📭</div><p>No {tab} leave requests</p></div>
+        :rows.map(req=>{
+          const m=staff.find(s=>s.id===req.staffId);
+          const tc=LEAVE_COLOR[req.type]||T.muted;
+          return (
+            <div key={req.id} style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"18px 20px",marginBottom:10 }}>
+              <div style={{ display:"flex",alignItems:"center",gap:14 }}>
+                <div style={{ width:42,height:42,borderRadius:10,background:dc(m?.dept)+"25",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:dc(m?.dept),fontFamily:"Syne, sans-serif",flexShrink:0 }}>{initials(m?.name||"?")}</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:3 }}>
+                    <span style={{ color:T.text,fontSize:14,fontWeight:600 }}>{m?.name||"Unknown"}</span>
+                    <span style={{ background:tc+"20",color:tc,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4 }}>{req.type}</span>
+                  </div>
+                  <div style={{ color:T.muted,fontSize:12 }}>{fmtDate(req.start)} — {fmtDate(req.end)} · <strong style={{ color:T.text }}>{req.days} day{req.days>1?"s":""}</strong></div>
+                  {req.reason&&<div style={{ color:T.muted,fontSize:12,marginTop:3,fontStyle:"italic" }}>"{req.reason}"</div>}
+                </div>
+                <div style={{ display:"flex",flexDirection:"column",gap:7,alignItems:"flex-end" }}>
+                  {req.status==="pending"
+                    ?<div style={{ display:"flex",gap:8 }}>
+                      <button onClick={()=>update(req.id,"approved")} style={{ background:`${T.green}20`,color:T.green,border:`1px solid ${T.green}40`,borderRadius:7,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"Inter, sans-serif" }}>Approve</button>
+                      <button onClick={()=>update(req.id,"declined")} style={{ background:`${T.red}15`,color:T.red,border:`1px solid ${T.red}30`,borderRadius:7,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"Inter, sans-serif" }}>Decline</button>
+                    </div>
+                    :<Badge status={req.status}/>
+                  }
+                  <span style={{ color:T.muted,fontSize:11 }}>Applied {fmtDate(req.applied)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })
+      }
+
+      {showApply&&(
+        <Modal title="Apply for Leave" onClose={()=>setShowApply(false)}>
+          <div style={{ marginBottom:16 }}>
+            <label style={{ color:T.muted,fontSize:12,fontWeight:600,letterSpacing:"0.05em" }}>STAFF MEMBER *</label>
+            <select value={form.staffId} onChange={e=>setForm(p=>({...p,staffId:e.target.value}))} style={{ width:"100%",background:T.surface,border:`1px solid ${T.border}`,color:T.text,borderRadius:8,padding:"11px 14px",fontSize:14,fontFamily:"Inter, sans-serif",outline:"none",marginTop:6,cursor:"pointer" }}>
+              <option value="">Select staff member...</option>
+              {staff.map(s=><option key={s.id} value={s.id}>{s.name} — {s.role}</option>)}
+            </select>
+          </div>
+          <Field label="Leave Type" value={form.type} onChange={v=>setForm(p=>({...p,type:v}))} options={LEAVE_TYPES} required/>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+            <Field label="Start Date" value={form.start} onChange={v=>setForm(p=>({...p,start:v}))} type="date" required/>
+            <Field label="End Date" value={form.end} onChange={v=>setForm(p=>({...p,end:v}))} type="date" required/>
+          </div>
+          <Field label="Reason (optional)" value={form.reason} onChange={v=>setForm(p=>({...p,reason:v}))} placeholder="Brief reason for leave..."/>
+          <div style={{ display:"flex",gap:10,marginTop:8 }}>
+            <button onClick={apply} style={{ flex:1,background:T.gold,color:"#000",border:"none",borderRadius:8,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"Inter, sans-serif" }}>Submit Request</button>
+            <button onClick={()=>setShowApply(false)} style={{ flex:1,background:"none",border:`1px solid ${T.border}`,color:T.muted,borderRadius:8,padding:"12px",fontSize:14,cursor:"pointer",fontFamily:"Inter, sans-serif" }}>Cancel</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── AI ASSISTANT ───
+function AIAssistant({ staff }) {
+  const [msgs, setMsgs] = useState([{ role:"assistant",content:"Hi! I'm ShiftSync AI — your SA HR assistant. I can draft disciplinary letters, explain BCEA & LRA, write performance reviews, and answer any HR question.\n\nWhat do you need today?" }]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef(null);
+  const QUICK = [
+    "Draft a written warning for repeated lateness",
+    "What is BCEA annual leave entitlement?",
+    "Write a final written warning for insubordination",
+    "Explain the CCMA dismissal process step by step",
+    "Draft a performance improvement plan",
+    "What notice period is required for resignation?",
+    "How does UIF work for employers?",
+    "Draft a suspension pending investigation letter",
+  ];
+  useEffect(()=>{ bottomRef.current?.scrollIntoView({ behavior:"smooth" }); },[msgs,loading]);
+  const send = async (text) => {
+    const msg = text||input.trim();
+    if(!msg||loading)return;
+    setInput("");
+    const newMsgs=[...msgs,{ role:"user",content:msg }];
+    setMsgs(newMsgs);
+    setLoading(true);
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({
+          model:"claude-sonnet-4-20250514",
+          max_tokens:1000,
+          system:AI_SYSTEM,
+          messages:newMsgs.map(m=>({ role:m.role,content:m.content })),
+        }),
+      });
+      const data = await res.json();
+      const reply = data.content?.[0]?.text||"Sorry, I couldn't process that. Please try again.";
+      setMsgs(p=>[...p,{ role:"assistant",content:reply }]);
+    } catch {
+      setMsgs(p=>[...p,{ role:"assistant",content:"Network error. Please check your connection and try again." }]);
+    }
+    setLoading(false);
+  };
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"calc(100vh - 112px)" }}>
+      <div style={{ marginBottom:16 }}>
+        <h1 style={{ fontFamily:"Syne, sans-serif",fontWeight:800,fontSize:26,color:T.text }}>AI HR Assistant</h1>
+        <p style={{ color:T.muted,fontSize:13,marginTop:3 }}>Powered by Claude · BCEA · LRA · UIF · CCMA · SA Labour Law</p>
+      </div>
+      <div style={{ display:"flex",gap:7,flexWrap:"wrap",marginBottom:14 }}>
+        {QUICK.map(p=>(
+          <button key={p} onClick={()=>send(p)} disabled={loading} style={{ background:T.card,border:`1px solid ${T.border}`,color:T.text,borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Inter, sans-serif",transition:"border-color .2s,background .2s" }}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.gold+"60";e.currentTarget.style.background=T.goldGlow;}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.card;}}>
+            {p}
+          </button>
+        ))}
+      </div>
+      <div style={{ flex:1,overflow:"auto",background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 20px 10px",marginBottom:12 }}>
+        {msgs.map((m,i)=>(
+          <div key={i} style={{ display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start",marginBottom:16 }}>
+            {m.role==="assistant"&&<div style={{ width:32,height:32,borderRadius:8,background:T.goldDim,border:`1px solid ${T.gold}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0,marginRight:10,marginTop:2 }}>🤖</div>}
+            <div style={{ maxWidth:"76%",background:m.role==="user"?T.gold:T.surface,color:m.role==="user"?"#000":T.text,padding:"12px 16px",borderRadius:m.role==="user"?"14px 14px 3px 14px":"14px 14px 14px 3px",fontSize:14,lineHeight:1.75,whiteSpace:"pre-wrap",border:m.role==="assistant"?`1px solid ${T.border}`:"none" }}>
+              {m.content}
+            </div>
+          </div>
+        ))}
+        {loading&&(
+          <div style={{ display:"flex",gap:8,alignItems:"center",marginBottom:16 }}>
+            <div style={{ width:32,height:32,borderRadius:8,background:T.goldDim,border:`1px solid ${T.gold}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14 }}>🤖</div>
+            <div style={{ background:T.surface,border:`1px solid ${T.border}`,padding:"12px 16px",borderRadius:"14px 14px 14px 3px",display:"flex",gap:5 }}>
+              {[0,1,2].map(i=><div key={i} style={{ width:7,height:7,borderRadius:"50%",background:T.muted,animation:`dot 1.2s infinite ${i*0.2}s` }}/>)}
+            </div>
+          </div>
+        )}
+        <div ref={bottomRef}/>
+      </div>
+      <div style={{ display:"flex",gap:10 }}>
+        <input value={input} onChange={e=>setInput(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()}
+          placeholder="Ask about BCEA, LRA, UIF, or request any HR document..."
+          disabled={loading}
+          style={{ flex:1,background:T.card,border:`1px solid ${T.border}`,color:T.text,borderRadius:10,padding:"13px 16px",fontSize:14,fontFamily:"Inter, sans-serif",outline:"none" }}
+        />
+        <button onClick={()=>send()} disabled={loading||!input.trim()}
+          style={{ background:loading?T.border:T.gold,color:loading?T.muted:"#000",border:"none",borderRadius:10,padding:"0 22px",fontSize:14,fontWeight:700,cursor:loading?"not-allowed":"pointer",fontFamily:"Inter, sans-serif",transition:"background .2s",flexShrink:0 }}>
+          Send →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── SIDEBAR ───
+function Sidebar({ tab, setTab, staff, leave }) {
+  const pending=leave.filter(l=>l.status==="pending").length;
+  const nav=[
+    { id:"overview",icon:"⚡",label:"Overview" },
+    { id:"staff",icon:"👥",label:"Staff Directory",badge:staff.length },
+    { id:"leave",icon:"📋",label:"Leave Manager",badge:pending,urgent:pending>0 },
+    { id:"ai",icon:"🤖",label:"AI Assistant" },
+  ];
+  return (
+    <div style={{ width:234,background:T.sidebar,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",flexShrink:0,height:"100vh",position:"sticky",top:0 }}>
+      <div style={{ padding:"22px 18px 18px",borderBottom:`1px solid ${T.border}` }}>
+        <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+          <div style={{ width:34,height:34,borderRadius:9,background:T.gold,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Syne, sans-serif",fontWeight:800,fontSize:17,color:"#000" }}>S</div>
+          <div>
+            <div style={{ fontFamily:"Syne, sans-serif",fontWeight:700,fontSize:16,color:T.text }}>ShiftSync</div>
+            <div style={{ color:T.muted,fontSize:10,letterSpacing:"0.05em" }}>HR PLATFORM</div>
+          </div>
+        </div>
+      </div>
+      <nav style={{ flex:1,padding:"14px 10px" }}>
+        <div style={{ color:T.muted,fontSize:10,fontWeight:700,letterSpacing:"0.1em",padding:"0 8px",marginBottom:8 }}>MAIN MENU</div>
+        {nav.map(item=>(
+          <button key={item.id} onClick={()=>setTab(item.id)} style={{ width:"100%",background:tab===item.id?`${T.gold}15`:"none",border:`1px solid ${tab===item.id?T.gold+"40":"transparent"}`,borderRadius:9,padding:"11px 12px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:3,fontFamily:"Inter, sans-serif",transition:"all .15s",textAlign:"left" }}>
+            <span style={{ fontSize:15 }}>{item.icon}</span>
+            <span style={{ fontSize:14,fontWeight:tab===item.id?600:400,color:tab===item.id?T.text:T.muted,flex:1 }}>{item.label}</span>
+            {item.badge>0&&<span style={{ background:item.urgent?T.gold:T.border,color:item.urgent?"#000":T.muted,fontSize:11,fontWeight:700,minWidth:20,height:20,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5px" }}>{item.badge}</span>}
+          </button>
+        ))}
+      </nav>
+      <div style={{ padding:"14px 18px",borderTop:`1px solid ${T.border}` }}>
+        <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+          <div style={{ width:34,height:34,borderRadius:9,background:T.goldDim,border:`1px solid ${T.gold}40`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Syne, sans-serif",fontSize:13,fontWeight:700,color:T.gold }}>A</div>
+          <div>
+            <div style={{ color:T.text,fontSize:13,fontWeight:600 }}>Admin</div>
+            <div style={{ color:T.muted,fontSize:11 }}>Business Owner</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── LANDING ───
+function Landing({ onEnter }) {
+  const [email, setEmail] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [count, setCount] = useState(47);
+  const submit = async () => {
+    if(!email.trim())return;
+    try {
+      let prev=[]; try{ const r=await window.storage.get("ss_emails"); if(r)prev=JSON.parse(r.value); }catch{}
+      if(!prev.includes(email)){ await window.storage.set("ss_emails",JSON.stringify([...prev,email])); setCount(c=>c+1); }
+    }catch{}
+    setSaved(true);
+  };
+  return (
+    <div style={{ minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 20px",textAlign:"center" }}>
+      <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:36 }}>
+        <div style={{ width:48,height:48,borderRadius:12,background:T.gold,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Syne, sans-serif",fontWeight:800,fontSize:24,color:"#000" }}>S</div>
+        <span style={{ fontFamily:"Syne, sans-serif",fontWeight:800,fontSize:24,color:T.text }}>ShiftSync</span>
+      </div>
+      <div style={{ display:"inline-flex",alignItems:"center",gap:8,background:T.goldDim,border:`1px solid ${T.gold}40`,borderRadius:20,padding:"6px 14px",fontSize:11,color:T.gold,fontWeight:700,letterSpacing:"0.07em",marginBottom:22 }}>
+        <span style={{ width:6,height:6,borderRadius:"50%",background:T.gold,animation:"pulse 2s infinite" }}/>
+        NOW IN BETA · SOUTH AFRICA · {count} ON WAITLIST
+      </div>
+      <h1 style={{ fontFamily:"Syne, sans-serif",fontSize:52,fontWeight:800,lineHeight:1.1,letterSpacing:"-0.025em",color:T.text,marginBottom:18,maxWidth:620 }}>
+        HR that actually<br/><span style={{ color:T.gold }}>works for your business.</span>
+      </h1>
+      <p style={{ color:T.muted,fontSize:16,lineHeight:1.75,maxWidth:500,marginBottom:36 }}>
+        Leave management, payslips, disciplinary records, and an AI that drafts your HR letters — built for South African SMEs. BCEA and LRA compliant.
+      </p>
+      {!saved
+        ?<div style={{ display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",justifyContent:"center" }}>
+          <input type="email" placeholder="your@email.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()}
+            style={{ width:256,background:T.card,border:`1px solid ${T.border}`,color:T.text,borderRadius:9,padding:"13px 17px",fontSize:14,fontFamily:"Inter, sans-serif",outline:"none" }}/>
+          <button onClick={submit} style={{ background:T.gold,color:"#000",border:"none",borderRadius:9,padding:"13px 24px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"Inter, sans-serif" }}>Get Early Access</button>
+        </div>
+        :<div style={{ background:"rgba(34,197,94,0.08)",border:"1px solid rgba(34,197,94,0.3)",borderRadius:9,padding:"13px 20px",color:T.green,fontSize:14,fontWeight:600,marginBottom:16,display:"inline-block" }}>✓ You're on the list! We'll be in touch soon.</div>
+      }
+      <button onClick={onEnter} style={{ background:"none",border:`1px solid ${T.border}`,color:T.muted,borderRadius:9,padding:"12px 28px",fontSize:14,cursor:"pointer",fontFamily:"Inter, sans-serif",transition:"all .2s",marginBottom:32 }}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor=T.gold+"60";e.currentTarget.style.color=T.text;}}
+        onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.muted;}}>
+        → Explore the live demo
+      </button>
+      <div style={{ display:"flex",gap:12,flexWrap:"wrap",justifyContent:"center" }}>
+        {["BCEA Compliant","LRA Aligned","UIF Ready","CCMA Paper Trail","AI-Powered"].map(b=>(
+          <span key={b} style={{ background:T.card,border:`1px solid ${T.border}`,color:T.muted,fontSize:12,padding:"6px 14px",borderRadius:20 }}>✓ {b}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── APP ───
+function App() {
+  const [view,setView]=useState("landing");
+  const [tab,setTab]=useState("overview");
+  const [staff,setStaff]=useState(SAMPLE_STAFF);
+  const [leave,setLeave]=useState(SAMPLE_LEAVE);
+  const render=()=>({ overview:<Overview staff={staff} leave={leave} setTab={setTab}/>, staff:<StaffDirectory staff={staff} setStaff={setStaff}/>, leave:<LeaveManager staff={staff} leave={leave} setLeave={setLeave}/>, ai:<AIAssistant staff={staff}/> }[tab]);
+  return (
+    <>
+      <style>{`
+        ${FONTS}
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+        html{scroll-behavior:smooth;}
+        body{background:${T.bg};color:${T.text};font-family:Inter,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;}
+        @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+        @keyframes dot{0%,100%{transform:translateY(0);opacity:.4;}50%{transform:translateY(-4px);opacity:1;}}
+        ::-webkit-scrollbar{width:4px;}
+        ::-webkit-scrollbar-track{background:transparent;}
+        ::-webkit-scrollbar-thumb{background:${T.border};border-radius:2px;}
+        select option{background:${T.card};color:${T.text};}
+      `}</style>
+      {view==="landing"
+        ?<Landing onEnter={()=>setView("dashboard")}/>
+        :<div style={{ display:"flex",height:"100vh",overflow:"hidden" }}>
+          <Sidebar tab={tab} setTab={setTab} staff={staff} leave={leave}/>
+          <main style={{ flex:1,overflow:"auto",padding:"34px 36px",background:T.bg }}>{render()}</main>
+        </div>
+      }
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
