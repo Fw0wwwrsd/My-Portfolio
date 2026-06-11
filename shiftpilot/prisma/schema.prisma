@@ -1,0 +1,249 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Organization {
+  id                       String   @id @default(cuid())
+  name                     String
+  industry                 String
+  timezone                 String   @default("Africa/Johannesburg")
+  weekStartsOn             Int      @default(1) // 1 = Monday
+  weeklyLaborBudget        Float?
+  autoApproveSwapsSameRole Boolean  @default(false)
+  autoApproveTimeOffDays   Int? // auto-approve time off requested >= N days in advance
+  createdAt                DateTime @default(now())
+
+  users          User[]
+  roles          Role[]
+  shifts         Shift[]
+  shiftTemplates ShiftTemplate[]
+  timeOff        TimeOffRequest[]
+  swaps          SwapRequest[]
+  timeEntries    TimeEntry[]
+  notifications  Notification[]
+  events         EventLog[]
+  integrations   Integration[]
+}
+
+model User {
+  id              String  @id @default(cuid())
+  orgId           String
+  name            String
+  email           String  @unique
+  passwordHash    String
+  role            String  @default("EMPLOYEE") // OWNER | MANAGER | EMPLOYEE
+  hourlyWage      Float   @default(0)
+  maxHoursPerWeek Int     @default(40)
+  minRestHours    Int     @default(10)
+  isActive        Boolean @default(true)
+  avatarColor     String  @default("#6366f1")
+
+  org             Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  roleAssignments UserRole[]
+  availability    AvailabilityWindow[]
+  shifts          Shift[]              @relation("ShiftAssignee")
+  createdShifts   Shift[]              @relation("ShiftCreator")
+  timeOff         TimeOffRequest[]     @relation("TimeOffRequester")
+  reviewedTimeOff TimeOffRequest[]     @relation("TimeOffReviewer")
+  swapRequests    SwapRequest[]        @relation("SwapRequester")
+  swapTargets     SwapRequest[]        @relation("SwapTarget")
+  reviewedSwaps   SwapRequest[]        @relation("SwapReviewer")
+  timeEntries     TimeEntry[]
+  notifications   Notification[]
+  sessions        Session[]
+
+  @@index([orgId])
+}
+
+model Role {
+  id    String @id @default(cuid())
+  orgId String
+  name  String
+  color String @default("#3b82f6")
+
+  org       Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  users     UserRole[]
+  shifts    Shift[]
+  templates ShiftTemplate[]
+
+  @@unique([orgId, name])
+}
+
+model UserRole {
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model AvailabilityWindow {
+  id          String @id @default(cuid())
+  userId      String
+  dayOfWeek   Int // 0 = Sunday … 6 = Saturday
+  startMinute Int // minutes from midnight
+  endMinute   Int
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model ShiftTemplate {
+  id          String @id @default(cuid())
+  orgId       String
+  roleId      String
+  name        String
+  startMinute Int
+  endMinute   Int // > 1440 means the shift crosses midnight
+  daysOfWeek  String // comma-separated, e.g. "1,2,3,4,5"
+  headcount   Int    @default(1)
+
+  org    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  role   Role         @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  shifts Shift[]
+
+  @@index([orgId])
+}
+
+model Shift {
+  id               String   @id @default(cuid())
+  orgId            String
+  roleId           String
+  userId           String? // null = open shift
+  date             DateTime // calendar day anchor at 00:00 UTC
+  startMinute      Int
+  endMinute        Int // > 1440 means the shift crosses midnight
+  status           String   @default("OPEN") // OPEN | ASSIGNED | PUBLISHED
+  notes            String?
+  sourceTemplateId String?
+  createdById      String?
+  createdAt        DateTime @default(now())
+
+  org            Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  role           Role           @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user           User?          @relation("ShiftAssignee", fields: [userId], references: [id], onDelete: SetNull)
+  createdBy      User?          @relation("ShiftCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  sourceTemplate ShiftTemplate? @relation(fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  swapRequests   SwapRequest[]
+  timeEntries    TimeEntry[]
+
+  @@index([orgId, date])
+  @@index([userId])
+}
+
+model TimeOffRequest {
+  id           String    @id @default(cuid())
+  orgId        String
+  userId       String
+  startDate    DateTime
+  endDate      DateTime
+  reason       String?
+  status       String    @default("PENDING") // PENDING | APPROVED | DECLINED
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user       User         @relation("TimeOffRequester", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User?        @relation("TimeOffReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, status])
+}
+
+model SwapRequest {
+  id           String    @id @default(cuid())
+  orgId        String
+  shiftId      String
+  requesterId  String
+  targetUserId String? // null = open offer, any eligible coworker can take it
+  note         String?
+  status       String    @default("PENDING") // PENDING | ACCEPTED_AWAITING_APPROVAL | APPROVED | DECLINED | CANCELLED
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  shift      Shift        @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  requester  User         @relation("SwapRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  targetUser User?        @relation("SwapTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  reviewedBy User?        @relation("SwapReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, status])
+}
+
+model TimeEntry {
+  id       String    @id @default(cuid())
+  orgId    String
+  userId   String
+  shiftId  String?
+  clockIn  DateTime
+  clockOut DateTime?
+
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shift Shift?       @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, clockIn])
+  @@index([userId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  orgId     String
+  userId    String
+  type      String
+  title     String
+  body      String
+  href      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+model EventLog {
+  id        String   @id @default(cuid())
+  orgId     String
+  type      String // e.g. "shift.created", "swap.approved"
+  payload   String // JSON
+  createdAt DateTime @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
+}
+
+model Integration {
+  id       String  @id @default(cuid())
+  orgId    String
+  slug     String
+  name     String
+  category String
+  status   String  @default("COMING_SOON") // COMING_SOON | CONNECTED
+  config   String?
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, slug])
+}
+
+model Session {
+  id        String   @id
+  userId    String
+  expiresAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
