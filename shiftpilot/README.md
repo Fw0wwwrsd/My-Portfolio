@@ -33,6 +33,28 @@ Open http://localhost:3000 — the landing page links to the demo login.
 
 Or create a brand-new business at `/onboarding` — pick any of the 15 industries and roles + shift templates are pre-built for you.
 
+## Install it like a real app (PWA)
+
+ShiftPilot ships as an installable Progressive Web App. Open it in a browser and:
+
+- **iPhone/iPad:** Share → *Add to Home Screen*
+- **Android (Chrome):** menu → *Add to Home screen* / *Install app*
+- **Desktop (Chrome/Edge):** click the install icon in the address bar
+
+It launches full-screen with its own icon, straight into the employee's "My shifts" view — no app store needed.
+
+## Deploy it (one command)
+
+The repo includes a production Docker setup with persistent storage:
+
+```bash
+docker compose up -d        # builds, seeds demo data on first boot, serves on :3000
+```
+
+- Data lives on the `shiftpilot-data` volume — restarts and upgrades never lose it.
+- Set `SEED_DEMO_DATA=false` to start empty and create your own business at `/onboarding`.
+- Works as-is on any Docker host: a $5 VPS, Fly.io, Railway, Render, Coolify, etc.
+
 ## Tech
 
 Next.js 16 (App Router, Server Actions) · TypeScript · Tailwind CSS v4 · Prisma 7 + SQLite · Vitest
