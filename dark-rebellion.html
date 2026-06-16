@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dark Rebellion – Juce Fragrances (Rebuild)</title>
+<meta name="description" content="Unleash your inner rebel. Dark Rebellion — an aromatic spicy Eau de Parfum for men by Juce Fragrances. Rebuilt as a front-end portfolio project.">
+<style>
+  :root{
+    --bg:#0b0b0e;
+    --bg-soft:#131318;
+    --card:#17171d;
+    --line:#26262e;
+    --text:#eceaf1;
+    --muted:#9b97a6;
+    --gold:#c9a24b;
+    --gold-soft:#e6c87e;
+    --violet:#6d4aff;
+    --radius:14px;
+    font-size:16px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;
+    line-height:1.6;
+  }
+  a{color:inherit;text-decoration:none}
+  img{max-width:100%;display:block}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+
+  /* Announcement bar */
+  .announce{
+    background:linear-gradient(90deg,#1d1430,#3a2150,#1d1430);
+    color:var(--gold-soft);
+    text-align:center;
+    font-size:.78rem;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    padding:8px 16px;
+  }
+
+  /* Header */
+  header{
+    position:sticky;top:0;z-index:50;
+    background:rgba(11,11,14,.85);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  .nav{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .logo{font-size:1.5rem;font-weight:800;letter-spacing:.35em}
+  .logo span{color:var(--gold)}
+  .nav ul{display:flex;gap:28px;list-style:none}
+  .nav ul a{font-size:.85rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);transition:color .2s}
+  .nav ul a:hover{color:var(--gold-soft)}
+  .cart-btn{
+    position:relative;background:none;border:1px solid var(--line);color:var(--text);
+    border-radius:999px;padding:8px 18px;cursor:pointer;font-size:.85rem;letter-spacing:.05em;
+    transition:border-color .2s;
+  }
+  .cart-btn:hover{border-color:var(--gold)}
+  .cart-count{
+    position:absolute;top:-8px;right:-8px;min-width:20px;height:20px;
+    background:var(--gold);color:#1a1408;border-radius:999px;
+    font-size:.7rem;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 5px;
+  }
+
+  .crumbs{font-size:.8rem;color:var(--muted);padding:18px 0}
+  .crumbs a:hover{color:var(--gold-soft)}
+
+  /* Product layout */
+  .product{display:grid;grid-template-columns:1.05fr 1fr;gap:48px;padding-bottom:64px}
+  @media(max-width:860px){.product{grid-template-columns:1fr}}
+
+  /* Gallery */
+  .stage{
+    border-radius:var(--radius);
+    background:radial-gradient(ellipse at 50% 30%,#2b1a3f 0%,#15101e 55%,#0b0b0e 100%);
+    border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;
+    min-height:480px;position:relative;overflow:hidden;
+  }
+  .stage::after{
+    content:"";position:absolute;inset:auto 0 0 0;height:38%;
+    background:linear-gradient(to top,rgba(0,0,0,.55),transparent);
+  }
+  .stage .view[hidden]{display:none}
+  .badge-stock{
+    position:absolute;top:16px;left:16px;z-index:2;
+    background:#3a1320;color:#ff9db1;border:1px solid #5b1e32;
+    font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;
+    padding:6px 12px;border-radius:999px;
+  }
+  .thumbs{display:flex;gap:12px;margin-top:14px}
+  .thumb{
+    width:76px;height:76px;border-radius:10px;border:1px solid var(--line);
+    background:radial-gradient(circle at 50% 35%,#241733,#101016);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    transition:border-color .2s;
+  }
+  .thumb.active,.thumb:hover{border-color:var(--gold)}
+  .thumb svg{width:60%;height:60%}
+
+  /* Info column */
+  .vendor{font-size:.75rem;letter-spacing:.25em;text-transform:uppercase;color:var(--gold)}
+  h1{font-size:2.6rem;font-weight:800;letter-spacing:.02em;margin:6px 0 4px}
+  .meta-line{color:var(--muted);font-size:.9rem;margin-bottom:14px}
+  .stars{color:var(--gold);letter-spacing:2px}
+  .rating{display:flex;align-items:center;gap:10px;font-size:.9rem;margin-bottom:18px}
+  .rating a{color:var(--muted);text-decoration:underline}
+
+  .price-row{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+  .price{font-size:1.9rem;font-weight:700;color:var(--gold-soft)}
+  .compare{color:var(--muted);text-decoration:line-through}
+  .save-pill{background:#21301c;color:#9fdb8a;border:1px solid #34502c;border-radius:999px;font-size:.72rem;padding:4px 10px;letter-spacing:.08em;text-transform:uppercase}
+  .tax-note{font-size:.78rem;color:var(--muted);margin-bottom:22px}
+
+  fieldset{border:none;margin-bottom:20px}
+  legend,.field-label{font-size:.78rem;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;display:block}
+  .options{display:flex;gap:10px;flex-wrap:wrap}
+  .opt{
+    border:1px solid var(--line);background:var(--bg-soft);color:var(--text);
+    border-radius:10px;padding:12px 18px;cursor:pointer;font-size:.95rem;
+    transition:border-color .2s, background .2s;
+  }
+  .opt.selected{border-color:var(--gold);background:#1f1a10;color:var(--gold-soft)}
+  .opt small{display:block;color:var(--muted);font-size:.75rem}
+
+  .buy-row{display:flex;gap:14px;align-items:stretch;margin:6px 0 14px}
+  .qty{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .qty button{width:44px;background:var(--bg-soft);border:none;color:var(--text);font-size:1.1rem;cursor:pointer}
+  .qty button:hover{background:#1e1e26}
+  .qty input{width:52px;text-align:center;background:var(--card);border:none;color:var(--text);font-size:1rem}
+  .add-cart{
+    flex:1;border:none;border-radius:10px;cursor:pointer;
+    background:linear-gradient(135deg,var(--gold),#a87f2e);
+    color:#191204;font-weight:700;font-size:.95rem;letter-spacing:.12em;text-transform:uppercase;
+    transition:filter .2s, transform .05s;
+  }
+  .add-cart:hover{filter:brightness(1.1)}
+  .add-cart:active{transform:scale(.99)}
+  .notify{
+    width:100%;margin-bottom:18px;padding:14px;border-radius:10px;cursor:pointer;
+    background:none;border:1px solid var(--line);color:var(--muted);
+    font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;transition:border-color .2s,color .2s;
+  }
+  .notify:hover{border-color:var(--gold);color:var(--gold-soft)}
+
+  .perks{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:8px 0 26px}
+  @media(max-width:480px){.perks{grid-template-columns:1fr}}
+  .perk{
+    background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;
+    padding:12px;text-align:center;font-size:.78rem;color:var(--muted);
+  }
+  .perk b{display:block;color:var(--text);font-size:.82rem;margin-bottom:2px}
+
+  .desc h2{font-size:1.05rem;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
+  .desc p{color:#c9c5d4;margin-bottom:12px}
+  .inspired{
+    border-left:3px solid var(--gold);background:var(--bg-soft);
+    padding:12px 16px;border-radius:0 10px 10px 0;color:var(--muted);font-size:.9rem;margin-top:8px;
+  }
+  .inspired b{color:var(--gold-soft)}
+
+  /* Notes pyramid */
+  .section-title{
+    text-align:center;font-size:1.6rem;font-weight:800;letter-spacing:.06em;margin-bottom:8px;
+  }
+  .section-sub{text-align:center;color:var(--muted);margin-bottom:34px;font-size:.95rem}
+  .notes{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:72px}
+  @media(max-width:760px){.notes{grid-template-columns:1fr}}
+  .note-card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:28px 22px;text-align:center;transition:transform .25s,border-color .25s;
+  }
+  .note-card:hover{transform:translateY(-4px);border-color:var(--gold)}
+  .note-emoji{font-size:1.9rem;margin-bottom:10px}
+  .note-card h3{font-size:.8rem;letter-spacing:.24em;text-transform:uppercase;color:var(--gold);margin-bottom:8px}
+  .note-card .names{font-size:1.05rem;font-weight:600;margin-bottom:8px}
+  .note-card p{color:var(--muted);font-size:.86rem}
+
+  /* Reviews */
+  .reviews{margin-bottom:72px}
+  .review-grid,.rel-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  @media(max-width:760px){.review-grid,.rel-grid{grid-template-columns:1fr}}
+  .review{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px;
+  }
+  .review .stars{font-size:.85rem}
+  .review h4{margin:8px 0 6px;font-size:1rem}
+  .review p{color:var(--muted);font-size:.88rem;margin-bottom:10px}
+  .review .who{font-size:.78rem;color:#7a7686}
+  .verified{color:#8fd49a}
+
+  /* Related */
+  .related{margin-bottom:80px}
+  .rel-card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    overflow:hidden;transition:transform .25s,border-color .25s;
+  }
+  .rel-card:hover{transform:translateY(-4px);border-color:var(--gold)}
+  .rel-art{height:150px;display:flex;align-items:center;justify-content:center;font-size:2.4rem}
+  .rel-body{padding:16px 18px 20px}
+  .rel-body h4{font-size:1rem;margin-bottom:2px}
+  .rel-body span{color:var(--muted);font-size:.85rem}
+
+  footer{border-top:1px solid var(--line);background:var(--bg-soft)}
+  .foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:24px;padding:36px 0}
+  .foot .logo{font-size:1.1rem}
+  .foot p{color:var(--muted);font-size:.82rem;max-width:420px}
+  .foot ul{list-style:none}
+  .foot li{margin-bottom:6px}
+  .foot a{color:var(--muted);font-size:.85rem}
+  .foot a:hover{color:var(--gold-soft)}
+  .legal{border-top:1px solid var(--line);text-align:center;color:#6f6b7c;font-size:.75rem;padding:16px 20px}
+
+  /* Toast */
+  .toast{
+    position:fixed;left:50%;bottom:28px;transform:translate(-50%,80px);
+    background:#1f1a10;color:var(--gold-soft);border:1px solid var(--gold);
+    padding:12px 22px;border-radius:999px;font-size:.9rem;opacity:0;
+    transition:transform .3s,opacity .3s;pointer-events:none;z-index:99;
+  }
+  .toast.show{transform:translate(-50%,0);opacity:1}
+</style>
+</head>
+<body>
+
+<div class="announce">Free 3 ml sample with every 50 ml fragrance &nbsp;·&nbsp; Free delivery on orders over R650</div>
+
+<header>
+  <div class="wrap nav">
+    <a class="logo" href="#">JU<span>CE</span></a>
+    <nav>
+      <ul>
+        <li><a href="#">Shop All</a></li>
+        <li><a href="#">Top Rated</a></li>
+        <li><a href="#">Summer Scents</a></li>
+        <li><a href="#">Sample Bundles</a></li>
+      </ul>
+    </nav>
+    <button class="cart-btn" id="cartBtn" aria-label="Cart">
+      Cart <span class="cart-count" id="cartCount">0</span>
+    </button>
+  </div>
+</header>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="index.html">Home</a> / <a href="#">Products</a> / <strong>Dark Rebellion</strong>
+  </nav>
+
+  <section class="product">
+    <!-- Gallery -->
+    <div>
+      <div class="stage">
+        <span class="badge-stock">Selling fast</span>
+        <!-- CSS/SVG bottle illustration (original product photos not redistributed) -->
+        <svg class="view" viewBox="0 0 220 340" width="230" height="340" role="img" aria-label="Dark Rebellion 50 ml bottle illustration">
+          <defs>
+            <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#3b2a55"/>
+              <stop offset="55%" stop-color="#161020"/>
+              <stop offset="100%" stop-color="#0c0a12"/>
+            </linearGradient>
+            <linearGradient id="cap" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#e6c87e"/>
+              <stop offset="100%" stop-color="#8c6a24"/>
+            </linearGradient>
+          </defs>
+          <rect x="88" y="18" width="44" height="46" rx="6" fill="url(#cap)"/>
+          <rect x="96" y="64" width="28" height="18" fill="#241a36"/>
+          <rect x="40" y="82" width="140" height="236" rx="18" fill="url(#glass)" stroke="#4a3a6a" stroke-width="2"/>
+          <rect x="52" y="96" width="10" height="200" rx="5" fill="#ffffff" opacity=".07"/>
+          <text x="110" y="190" text-anchor="middle" fill="#c9a24b" font-size="13" letter-spacing="4" font-family="Segoe UI, sans-serif">JUCE</text>
+          <text x="110" y="216" text-anchor="middle" fill="#eceaf1" font-size="15" font-weight="bold" letter-spacing="1" font-family="Segoe UI, sans-serif">DARK</text>
+          <text x="110" y="236" text-anchor="middle" fill="#eceaf1" font-size="15" font-weight="bold" letter-spacing="1" font-family="Segoe UI, sans-serif">REBELLION</text>
+          <text x="110" y="262" text-anchor="middle" fill="#9b97a6" font-size="9" letter-spacing="2" font-family="Segoe UI, sans-serif">EAU DE PARFUM · 50 ML</text>
+        </svg>
+        <svg class="view" viewBox="0 0 220 340" width="230" height="340" role="img" aria-label="Dark Rebellion presentation box illustration" hidden>
+          <rect x="50" y="50" width="120" height="240" rx="8" fill="#15101e" stroke="#c9a24b" stroke-width="2"/>
+          <rect x="50" y="50" width="120" height="60" rx="8" fill="#1f1530"/>
+          <line x1="50" y1="110" x2="170" y2="110" stroke="#c9a24b" stroke-width="1"/>
+          <text x="110" y="170" text-anchor="middle" fill="#c9a24b" font-size="13" letter-spacing="4" font-family="Segoe UI, sans-serif">JUCE</text>
+          <text x="110" y="196" text-anchor="middle" fill="#eceaf1" font-size="14" font-weight="bold" font-family="Segoe UI, sans-serif">DARK REBELLION</text>
+          <text x="110" y="220" text-anchor="middle" fill="#9b97a6" font-size="9" letter-spacing="2" font-family="Segoe UI, sans-serif">EAU DE PARFUM · 50 ML</text>
+        </svg>
+        <svg class="view" viewBox="0 0 220 340" width="230" height="340" role="img" aria-label="Dark Rebellion 3 ml sample vial illustration" hidden>
+          <rect x="96" y="70" width="28" height="22" rx="3" fill="url(#cap2)"/>
+          <rect x="84" y="92" width="52" height="160" rx="16" fill="#1f1530" stroke="#4a3a6a" stroke-width="2"/>
+          <defs><linearGradient id="cap2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#e6c87e"/><stop offset="100%" stop-color="#8c6a24"/></linearGradient></defs>
+          <text x="110" y="170" text-anchor="middle" fill="#c9a24b" font-size="9" letter-spacing="2" font-family="Segoe UI, sans-serif">JUCE</text>
+          <text x="110" y="186" text-anchor="middle" fill="#eceaf1" font-size="8" font-family="Segoe UI, sans-serif">DARK REBELLION</text>
+          <text x="110" y="280" text-anchor="middle" fill="#9b97a6" font-size="9" letter-spacing="2" font-family="Segoe UI, sans-serif">3 ML SAMPLE</text>
+        </svg>
+      </div>
+      <div class="thumbs" role="group" aria-label="Product images">
+        <button class="thumb active" aria-pressed="true" aria-label="Bottle view">
+          <svg viewBox="0 0 40 60"><rect x="14" y="2" width="12" height="10" rx="2" fill="#c9a24b"/><rect x="6" y="14" width="28" height="44" rx="5" fill="#2b1f42"/></svg>
+        </button>
+        <button class="thumb" aria-pressed="false" aria-label="Box view">
+          <svg viewBox="0 0 40 60"><rect x="6" y="8" width="28" height="46" rx="3" fill="#1c1426" stroke="#c9a24b"/></svg>
+        </button>
+        <button class="thumb" aria-pressed="false" aria-label="Sample vial view">
+          <svg viewBox="0 0 40 60"><rect x="16" y="6" width="8" height="6" fill="#c9a24b"/><rect x="13" y="12" width="14" height="40" rx="6" fill="#2b1f42"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Info -->
+    <div>
+      <p class="vendor">Juce Fragrances</p>
+      <h1>Dark Rebellion</h1>
+      <p class="meta-line">Eau de Parfum &nbsp;·&nbsp; Aromatic Spicy &nbsp;·&nbsp; For Him</p>
+
+      <div class="rating">
+        <span class="stars" role="img" aria-label="Rated 4.8 out of 5 stars">★★★★★</span>
+        <a href="#reviews">4.8 · 124 reviews</a>
+      </div>
+
+      <div class="price-row">
+        <span class="price" id="price">R 499.00</span>
+        <span class="compare" id="compare">R 650.00</span>
+        <span class="save-pill" id="savePill">Save 23%</span>
+      </div>
+      <p class="tax-note">Tax included. Shipping calculated at checkout.</p>
+
+      <fieldset>
+        <legend>Size</legend>
+        <div class="options" id="sizeOptions">
+          <button class="opt selected" data-price="499" data-compare="650">50 ml <small>+ free 3 ml sample</small></button>
+          <button class="opt" data-price="99" data-compare="">3 ml sample <small>try before you buy</small></button>
+        </div>
+      </fieldset>
+
+      <span class="field-label">Quantity</span>
+      <div class="buy-row">
+        <div class="qty">
+          <button id="qtyMinus" aria-label="Decrease quantity">−</button>
+          <input id="qtyInput" type="text" inputmode="numeric" value="1" aria-label="Quantity">
+          <button id="qtyPlus" aria-label="Increase quantity">+</button>
+        </div>
+        <button class="add-cart" id="addCart">Add to cart</button>
+      </div>
+      <button class="notify">Notify me when back in stock</button>
+
+      <div class="perks">
+        <div class="perk"><b>Free sample</b>3 ml with every 50 ml</div>
+        <div class="perk"><b>Fast delivery</b>2–4 days nationwide</div>
+        <div class="perk"><b>Secure checkout</b>All major methods</div>
+      </div>
+
+      <div class="desc">
+        <h2>Description</h2>
+        <p><strong>Unleash your inner rebel.</strong> Step into a world of mystery and seduction with this captivating fragrance.</p>
+        <p>Opening notes of pineapple, star anise and cardamom provide a fruity and spicy allure. As the fragrance evolves, lavender, sea notes and violet bring a refreshing and calming sensation, while base notes of teakwood, amber, vetiver and vanilla add depth and warmth — enveloping you in an aura of intrigue.</p>
+        <p>From the zesty start to the lingering intrigue, Dark Rebellion exudes charisma and leaves an unforgettable mark.</p>
+        <div class="inspired">Masculine, ambery and bold — inspired by <b>Carolina Herrera 212 VIP Black</b>.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Notes -->
+  <section>
+    <h2 class="section-title">Fragrance Notes</h2>
+    <p class="section-sub">A layered, aromatic-spicy composition that evolves on the skin</p>
+    <div class="notes">
+      <div class="note-card">
+        <div class="note-emoji">🍍</div>
+        <h3>Top Notes</h3>
+        <div class="names">Pineapple · Star Anise · Cardamom</div>
+        <p>A fruity, spicy opening with instant allure.</p>
+      </div>
+      <div class="note-card">
+        <div class="note-emoji">🌊</div>
+        <h3>Heart Notes</h3>
+        <div class="names">Lavender · Sea Notes · Violet</div>
+        <p>A refreshing, calming wave as the scent evolves.</p>
+      </div>
+      <div class="note-card">
+        <div class="note-emoji">🪵</div>
+        <h3>Base Notes</h3>
+        <div class="names">Teakwood · Amber · Vetiver · Vanilla</div>
+        <p>Depth and warmth that linger in an aura of intrigue.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Reviews -->
+  <section class="reviews" id="reviews">
+    <h2 class="section-title">Customer Reviews</h2>
+    <p class="section-sub"><span class="stars" role="img" aria-label="Rated 4.8 out of 5 stars">★★★★★</span> &nbsp;4.8 out of 5 — based on 124 reviews</p>
+    <div class="review-grid">
+      <article class="review">
+        <span class="stars" role="img" aria-label="Rated 5 out of 5 stars">★★★★★</span>
+        <h4>Absolutely captivating</h4>
+        <p>From the zesty start to the lingering intrigue, this fragrance exudes charisma and leaves an unforgettable mark.</p>
+        <span class="who">Thabo M. · <span class="verified">✔ Verified buyer</span></span>
+      </article>
+      <article class="review">
+        <span class="stars" role="img" aria-label="Rated 5 out of 5 stars">★★★★★</span>
+        <h4>Quick delivery, long lasting</h4>
+        <p>Delivery was quick and the fragrance is long lasting. The free sample was a great touch — already eyeing my next bottle.</p>
+        <span class="who">Sipho K. · <span class="verified">✔ Verified buyer</span></span>
+      </article>
+      <article class="review">
+        <span class="stars" role="img" aria-label="Rated 4 out of 5 stars">★★★★☆</span>
+        <h4>My new signature scent</h4>
+        <p>Dark, smooth and seriously addictive. The 212 VIP Black inspiration is spot on. Compliments all day at the office.</p>
+        <span class="who">Lerato N. · <span class="verified">✔ Verified buyer</span></span>
+      </article>
+    </div>
+  </section>
+
+  <!-- Related -->
+  <section class="related">
+    <h2 class="section-title">You May Also Like</h2>
+    <p class="section-sub">More from Juce Fragrances</p>
+    <div class="rel-grid">
+      <a class="rel-card" href="#">
+        <div class="rel-art" style="background:radial-gradient(circle at 50% 40%,#0e3a33,#0b0b0e)">🌴</div>
+        <div class="rel-body"><h4>The Tropics</h4><span>Fresh · Fruity — R 499.00</span></div>
+      </a>
+      <a class="rel-card" href="#">
+        <div class="rel-art" style="background:radial-gradient(circle at 50% 40%,#3a2a0e,#0b0b0e)">🏜️</div>
+        <div class="rel-body"><h4>Desert Nomad</h4><span>Warm · Woody — R 499.00</span></div>
+      </a>
+      <a class="rel-card" href="#">
+        <div class="rel-art" style="background:radial-gradient(circle at 50% 40%,#0e2a3a,#0b0b0e)">⛵</div>
+        <div class="rel-body"><h4>Exotic Voyage</h4><span>Aquatic · Citrus — R 499.00</span></div>
+      </a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div>
+      <p class="logo">JU<span>CE</span></p>
+      <p>Immerse yourself. Premium inspired fragrances, proudly South African. This page is a front-end rebuild of the Juce Fragrances product page, created as a portfolio exercise.</p>
+    </div>
+    <ul>
+      <li><a href="#">Shop All</a></li>
+      <li><a href="#">Sample Bundles</a></li>
+      <li><a href="#">Top Rated</a></li>
+    </ul>
+    <ul>
+      <li><a href="#">Shipping &amp; Returns</a></li>
+      <li><a href="#">FAQ</a></li>
+      <li><a href="index.html">Back to my portfolio</a></li>
+    </ul>
+  </div>
+  <p class="legal">Portfolio rebuild by Nhlamulo Shingange · Not affiliated with Juce Fragrances · Product names and copy used for educational purposes only</p>
+</footer>
+
+<div class="toast" id="toast">Added to cart ✓</div>
+
+<script>
+  const fmt = v => "R " + v.toFixed(2);
+  const price = document.getElementById("price");
+  const compare = document.getElementById("compare");
+  const savePill = document.getElementById("savePill");
+  const qtyInput = document.getElementById("qtyInput");
+  const cartCount = document.getElementById("cartCount");
+  const toast = document.getElementById("toast");
+
+  let toastTimer;
+  const showToast = msg => {
+    toast.textContent = msg;
+    toast.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
+  };
+
+  // Size variant selection — markup attributes are the single source of truth
+  const opts = [...document.querySelectorAll("#sizeOptions .opt")];
+  const applyVariant = btn => {
+    opts.forEach(b => b.classList.toggle("selected", b === btn));
+    const p = Number(btn.dataset.price);
+    const c = Number(btn.dataset.compare) || null;
+    price.textContent = fmt(p);
+    compare.hidden = savePill.hidden = !c;
+    if (c) {
+      compare.textContent = fmt(c);
+      savePill.textContent = "Save " + Math.round((1 - p / c) * 100) + "%";
+    }
+  };
+  opts.forEach(btn => btn.addEventListener("click", () => applyVariant(btn)));
+  applyVariant(document.querySelector("#sizeOptions .opt.selected"));
+
+  // Quantity stepper — getQty owns the 1–10 bounds
+  const getQty = () => Math.min(10, Math.max(1, parseInt(qtyInput.value, 10) || 1));
+  const setQty = v => { qtyInput.value = v; qtyInput.value = getQty(); };
+  document.getElementById("qtyMinus").addEventListener("click", () => setQty(getQty() - 1));
+  document.getElementById("qtyPlus").addEventListener("click", () => setQty(getQty() + 1));
+  qtyInput.addEventListener("change", () => setQty(qtyInput.value));
+
+  // Add to cart
+  let inCart = 0;
+  document.getElementById("addCart").addEventListener("click", () => {
+    inCart += getQty();
+    cartCount.textContent = inCart;
+    showToast("Added to cart ✓");
+  });
+
+  document.querySelector(".notify").addEventListener("click", () => showToast("We'll email you when it's back ✓"));
+
+  // Gallery — thumbnails swap the stage view
+  const thumbs = [...document.querySelectorAll(".thumb")];
+  const views = [...document.querySelectorAll(".stage .view")];
+  thumbs.forEach((t, i) => {
+    t.addEventListener("click", () => {
+      thumbs.forEach(x => {
+        x.classList.toggle("active", x === t);
+        x.setAttribute("aria-pressed", x === t);
+      });
+      views.forEach((v, j) => v.toggleAttribute("hidden", j !== i));
+    });
+  });
+</script>
+</body>
+</html>
