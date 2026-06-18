@@ -1,0 +1,16 @@
+services:
+  shiftpilot:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - shiftpilot-data:/data
+    environment:
+      - DATABASE_URL=file:/data/shiftpilot.db
+      # Set SEED_DEMO_DATA=false to start with an empty database
+      # (you'll create your business at /onboarding instead).
+      - SEED_DEMO_DATA=${SEED_DEMO_DATA:-true}
+    restart: unless-stopped
+
+volumes:
+  shiftpilot-data:
